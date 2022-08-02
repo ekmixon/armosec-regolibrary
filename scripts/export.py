@@ -47,7 +47,7 @@ def load_rules():
 
 
 def load_controls(loaded_rules: dict):
-    p2 = os.path.join(currDir, 'controls') 
+    p2 = os.path.join(currDir, 'controls')
     controls_path = Path(p2).glob('**/*.json')
     loaded_controls = {}
     controls_list = []
@@ -64,13 +64,15 @@ def load_controls(loaded_rules: dict):
         controls_list.append(new_control_copy)
 
         for rule_name in new_control["rulesNames"]:
-            if rule_name in loaded_rules:
-                new_control["rules"].append(loaded_rules[rule_name])
-                new_row = [new_control['id'], rule_name] # TODO : change 'id' to 'controlID'
-                control_rule_rows.append(new_row)
-            else:
-                raise Exception("Error in ruleNames of control {}, rule {} does not exist".format(new_control["name"], rule_name))
+            if rule_name not in loaded_rules:
+                raise Exception(
+                    f'Error in ruleNames of control {new_control["name"]}, rule {rule_name} does not exist'
+                )
 
+
+            new_control["rules"].append(loaded_rules[rule_name])
+            new_row = [new_control['id'], rule_name] # TODO : change 'id' to 'controlID'
+            control_rule_rows.append(new_row)
         del new_control["rulesNames"]  # remove rule names list from dict
         loaded_controls[new_control['name']] = new_control
 
@@ -78,7 +80,7 @@ def load_controls(loaded_rules: dict):
 
 
 def load_frameworks(loaded_controls: dict):
-    p3 = os.path.join(currDir, 'frameworks') 
+    p3 = os.path.join(currDir, 'frameworks')
     frameworks_path = Path(p3).glob('**/*.json')
     loaded_frameworks = {}
     frameworks_list = []
@@ -95,20 +97,22 @@ def load_frameworks(loaded_controls: dict):
         frameworks_list.append(new_framework_copy)
 
         for control_name in new_framework["controlsNames"]:
-            if control_name in loaded_controls:
-                new_framework["controls"].append(loaded_controls[control_name])
-                new_row = [new_framework['name'], loaded_controls[control_name]['id'], control_name] # TODO : change 'id' to 'controlID'
-                framework_control_rows.append(new_row)
-            else:
-                raise Exception("Error in controlsNames of framework {}, control {} does not exist".format(new_framework["name"], control_name))
+            if control_name not in loaded_controls:
+                raise Exception(
+                    f'Error in controlsNames of framework {new_framework["name"]}, control {control_name} does not exist'
+                )
 
+
+            new_framework["controls"].append(loaded_controls[control_name])
+            new_row = [new_framework['name'], loaded_controls[control_name]['id'], control_name] # TODO : change 'id' to 'controlID'
+            framework_control_rows.append(new_row)
         del new_framework["controlsNames"]
         loaded_frameworks[new_framework['name']] = new_framework
 
     return loaded_frameworks, frameworks_list
 
 def validate_controls():
-    p4 = os.path.join(currDir, 'controls') 
+    p4 = os.path.join(currDir, 'controls')
     controls_path = list(Path(p4).glob('**/*.json'))
     set_of_ids = set()
 
@@ -117,16 +121,18 @@ def validate_controls():
 
         with open(path_in_str, "r") as f:
             new_control = json.load(f)
-        
+
         set_of_ids.add(int(new_control["id"][2:]))
 
     sum_of_controls = len(controls_path)
     if sum_of_controls != len(set_of_ids):
-        raise Exception("Error validate the numbers of controls, {} != {}".format(sum_of_controls ,len(set_of_ids)))
+        raise Exception(
+            f"Error validate the numbers of controls, {sum_of_controls} != {len(set_of_ids)}"
+        )
 
 def load_default_config_inputs():
     default_filename = "default-config-inputs"
-    p5 = os.path.join(currDir, default_filename + ".json")
+    p5 = os.path.join(currDir, f"{default_filename}.json")
     with open(p5, "r") as f:
         config_inputs = json.load(f)
     return config_inputs

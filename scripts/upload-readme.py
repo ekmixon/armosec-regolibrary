@@ -33,7 +33,7 @@ class ReadmeApi(object):
         return r.json()
 
     def get_category(self,category_slug : str):
-        url = "https://dash.readme.com/api/v1/categories/%s" % category_slug
+        url = f"https://dash.readme.com/api/v1/categories/{category_slug}"
 
         r = requests.request("GET", url,headers={"Accept": "application/json"}, auth=(self.api_key, ''))
 
@@ -43,7 +43,7 @@ class ReadmeApi(object):
         return r.json()
 
     def get_docs_in_category(self, category_slug: str):
-        url = "https://dash.readme.com/api/v1/categories/%s/docs" % category_slug
+        url = f"https://dash.readme.com/api/v1/categories/{category_slug}/docs"
 
         r = requests.request("GET", url, headers={"Accept":"application/json"}, auth=(self.api_key, ''))
 
@@ -53,23 +53,23 @@ class ReadmeApi(object):
         return r.json()
 
     def get_doc(self, doc_slug: str):
-        url = "https://dash.readme.com/api/v1/docs/%s" % doc_slug
+        url = f"https://dash.readme.com/api/v1/docs/{doc_slug}"
 
         r = requests.request("GET", url, headers={"Accept":"application/json"}, auth=(self.api_key, ''))
 
         if r.status_code == 404:
             return None
-        if r.status_code < 200 or 299 < r.status_code:
+        if r.status_code < 200 or r.status_code > 299:
             raise Exception('Failed to docs for category')
 
         return r.json()
 
     def delete_doc(self, doc_slug: str):
-        url = "https://dash.readme.com/api/v1/docs/%s" % doc_slug
+        url = f"https://dash.readme.com/api/v1/docs/{doc_slug}"
 
         r = requests.request("DELETE", url, headers={"Accept":"application/json"}, auth=(self.api_key, ''))
 
-        if r.status_code < 200 or 299 < r.status_code:
+        if r.status_code < 200 or r.status_code > 299:
             raise Exception('Failed to delete doc (%d)'%r.status_code)
     
     def create_doc(self, slug: str, parent_id: str, order: int, title: str, body: str, category: str):
@@ -93,14 +93,14 @@ class ReadmeApi(object):
         r = requests.request("POST", url, json=payload, headers=headers, auth=(self.api_key, ''))
 
 
-        if r.status_code < 200 or 299 < r.status_code:
-            raise Exception('Failed to create doc: %s'%r.text)
+        if r.status_code < 200 or r.status_code > 299:
+            raise Exception(f'Failed to create doc: {r.text}')
 
         return r.json()
         
     def update_doc(self, doc_slug: str, order: int, title: str, body: str, category: str):
 
-        url = "https://dash.readme.com/api/v1/docs/%s" % doc_slug
+        url = f"https://dash.readme.com/api/v1/docs/{doc_slug}"
 
         payload = {
             "hidden": False,
@@ -116,8 +116,8 @@ class ReadmeApi(object):
 
         r = requests.request("PUT", url, json=payload, headers=headers, auth=(self.api_key, ''))
 
-        if r.status_code < 200 or 299 < r.status_code:
-            raise Exception('Failed to update doc: %s'%r.text)
+        if r.status_code < 200 or r.status_code > 299:
+            raise Exception(f'Failed to update doc: {r.text}')
 
         return r.json()
 
@@ -140,10 +140,7 @@ def get_document_for_control(readmeapi : ReadmeApi, control):
     controls_category = filtered_categories[0]
     docs_in_control_category = readmeapi.get_docs_in_category(controls_category['slug'])
     filtered_docs = list(filter(lambda d: d['title'].startswith(control['id']),docs_in_control_category))
-    if len(filtered_docs) != 1:
-        return None
-    control_doc = filtered_docs[0]
-    return control_doc
+    return None if len(filtered_docs) != 1 else filtered_docs[0]
 
 
 
@@ -171,9 +168,11 @@ def create_md_for_control(control):
         if 'controlConfigInputs' in rule_obj:
             for control_config in rule_obj['controlConfigInputs']:
                 control_config_input[control_config['path']] = control_config
-        if 'attributes' in rule_obj:
-            if 'hostSensorRule' in rule_obj['attributes']:
-                host_sensor = True
+        if (
+            'attributes' in rule_obj
+            and 'hostSensorRule' in rule_obj['attributes']
+        ):
+            host_sensor = True
         if 'relevantCloudProviders' in rule_obj:
             cloud_control = len(rule_obj['relevantCloudProviders']) > 0
 
@@ -209,7 +208,12 @@ def create_md_for_control(control):
             control_config = control_config_input[control_config_name]
             configuration_text += '### ' + control_config['name'] + '\n'
             config_name = control_config['path'].split('.')[-1]
-            configuration_text += '[' + config_name + '](doc:configuration_parameter_%s)'%config_name.lower() + '\n'
+            configuration_text += (
+                f'[{config_name}'
+                + f'](doc:configuration_parameter_{config_name.lower()})'
+                + '\n'
+            )
+
             configuration_text += control_config['description'] + '\n'
         md_text += configuration_text
 
@@ -244,15 +248,15 @@ def get_configuration_parameters_info():
                                 name = config['path'].split('.')[-1]
                                 config_parameters[name] = config
         except Exception as e:
-            print('error processing %s: %s'%(control_json_file_name,e))
-        
+            print(f'error processing {control_json_file_name}: {e}')
+
     return config_parameters, default_config_inputs
 
 def main():
     API_KEY = os.getenv('README_API_KEY')
     if not API_KEY:
         raise Exception('README_API_KEY is not defined')
-    
+
     # Validate connection
     readmeapi = ReadmeApi()
     readmeapi.authenticate(API_KEY)
@@ -270,7 +274,7 @@ def main():
             if control_doc['_id'] == parent_control_doc['_id']:
                 for child_doc in control_doc['children']:
                     readmeapi.delete_doc(child_doc['slug'])
-                    print('Deleted %s'%child_doc['slug'])
+                    print(f"Deleted {child_doc['slug']}")
 
     # Configuration parameter processing
     config_parameters, default_config_inputs = get_configuration_parameters_info()
@@ -286,11 +290,12 @@ def main():
         for dvalue in default_config_inputs[config_parameters_path]:
             md += '* %s\n' % dvalue
 
-        title = 'Parameter: %s' % config_parameters_path
-        config_parameter_slug = 'configuration_parameter_' + config_parameters_path.lower()
-        config_parameter_doc = readmeapi.get_doc(config_parameter_slug)
+        title = f'Parameter: {config_parameters_path}'
+        config_parameter_slug = (
+            f'configuration_parameter_{config_parameters_path.lower()}'
+        )
 
-        if config_parameter_doc:
+        if config_parameter_doc := readmeapi.get_doc(config_parameter_slug):
             readmeapi.update_doc(config_parameter_slug,i,title,md,control_category_obj['_id'])
             print('\tupdated')
         else:
@@ -298,56 +303,54 @@ def main():
             readmeapi.create_doc(config_parameter_slug,parent_config_param_doc['_id'],i,title,md,control_category_obj['_id'])
             print('\tcreated')
         i = i + 1
-    
+
     # Start processing
     for control_json_file_name in filter(lambda fn: fn.endswith('.json'),os.listdir('controls')):
-        #try:
-        if True:
-            print('processing %s' % control_json_file_name)
-            control_obj = json.load(open(os.path.join('controls',control_json_file_name)))
+        print(f'processing {control_json_file_name}')
+        control_obj = json.load(open(os.path.join('controls',control_json_file_name)))
 
-            base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-            if 'controlID' in control_obj:
-                controlID = control_obj['controlID']
-                example_file_name = controlID.replace('C-00','c0') + '.yaml'
-                example_file_name = os.path.join('controls','examples',example_file_name)
-                if os.path.isfile(example_file_name):
-                    with open(example_file_name) as f:
-                        control_obj['example'] = f.read()
-                   
-            if 'example' in control_obj and len(control_obj['example']) > 0 and control_obj['example'][0] == '@':
-                example_file_name = os.path.join(base_dir,control_obj['example'][1:])
-                if os.path.isfile(example_file_name):
-                    with open(example_file_name) as f:
-                        control_obj['example'] = f.read()
-                else:
-                    print('warning: %s is not a file' % example_file_name)
-            
-            control_obj['rules'] = []
-            for rule_directory_name in os.listdir('rules'):
-                rule_metadata_file_name = os.path.join('rules',rule_directory_name,'rule.metadata.json')
-                if os.path.isfile(rule_metadata_file_name):
-                    rule_obj = json.load(open(rule_metadata_file_name))
-                    if rule_obj['name'] in control_obj['rulesNames']:
-                        control_obj['rules'].append(rule_obj)
+        base_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        if 'controlID' in control_obj:
+            controlID = control_obj['controlID']
+            example_file_name = controlID.replace('C-00','c0') + '.yaml'
+            example_file_name = os.path.join('controls','examples',example_file_name)
+            if os.path.isfile(example_file_name):
+                with open(example_file_name) as f:
+                    control_obj['example'] = f.read()
 
-            md = create_md_for_control(control_obj)
-            
-            title = '%(id)s - %(name)s' % control_obj
-
-            control_slug = generate_slug(control_obj)
-            
-            control_doc = readmeapi.get_doc(control_slug)
-
-            if control_doc and len(control_obj['id']) > 2:
-                readmeapi.update_doc(control_slug,int(control_obj['id'][2:]),title,md,control_category_obj['_id'])
-                print('\tupdated')
+        if 'example' in control_obj and len(control_obj['example']) > 0 and control_obj['example'][0] == '@':
+            example_file_name = os.path.join(base_dir,control_obj['example'][1:])
+            if os.path.isfile(example_file_name):
+                with open(example_file_name) as f:
+                    control_obj['example'] = f.read()
             else:
-                readmeapi.create_doc(control_slug,parent_control_doc['_id'],int(control_obj['id'][2:]),title,md,control_category_obj['_id'])
-                print('\tcreated')
+                print(f'warning: {example_file_name} is not a file')
 
-        #except Exception as e:
-        #    print('error processing %s: %s'%(control_json_file_name,e))
+        control_obj['rules'] = []
+        for rule_directory_name in os.listdir('rules'):
+            rule_metadata_file_name = os.path.join('rules',rule_directory_name,'rule.metadata.json')
+            if os.path.isfile(rule_metadata_file_name):
+                rule_obj = json.load(open(rule_metadata_file_name))
+                if rule_obj['name'] in control_obj['rulesNames']:
+                    control_obj['rules'].append(rule_obj)
+
+        md = create_md_for_control(control_obj)
+
+        title = '%(id)s - %(name)s' % control_obj
+
+        control_slug = generate_slug(control_obj)
+
+        control_doc = readmeapi.get_doc(control_slug)
+
+        if control_doc and len(control_obj['id']) > 2:
+            readmeapi.update_doc(control_slug,int(control_obj['id'][2:]),title,md,control_category_obj['_id'])
+            print('\tupdated')
+        else:
+            readmeapi.create_doc(control_slug,parent_control_doc['_id'],int(control_obj['id'][2:]),title,md,control_category_obj['_id'])
+            print('\tcreated')
+
+            #except Exception as e:
+            #    print('error processing %s: %s'%(control_json_file_name,e))
 
     # Delete children of control doc in co
     exit(0)
